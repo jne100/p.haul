@@ -30,15 +30,13 @@ class p_haul_type:
 		# v_bridge is the bridge to which thie veth is attached
 		#
 		self._veths = []
-		self._cfg = ""
 
 	def __load_ct_config(self, path):
 		logging.info("Loading config file from %s", path)
 
 		# Read container config
-		with open(os.path.join(path, self.__ct_config())) as ifd:
-			self._cfg = ifd.read()
-		config = parse_vz_config(self._cfg)
+		with open(self.__ct_config_path(path)) as ifd:
+			config = parse_vz_config(ifd.read())
 
 		# Read global config
 		with open(vz_global_conf) as ifd:
@@ -74,10 +72,13 @@ class p_haul_type:
 			self._ct_root = expand_veid_var(global_config["VE_ROOT"],
 				self._ctid)
 
-	def __apply_cg_config(self):
-		logging.info("Applying CT configs")
-		# FIXME -- implement
-		pass
+	def __load_ct_config_dst(self, path):
+		if not os.path.isfile(self.__ct_config_path(path)):
+			raise Exception("CT config missing on destination")
+		self.__load_ct_config(path)
+
+	def __ct_config_path(self, conf_dir):
+		return os.path.join(conf_dir, "{0}.conf".format(self._ctid))
 
 	def __cg_set_veid(self):
 		"""Initialize veid in ve.veid for ve cgroup"""
@@ -98,6 +99,7 @@ class p_haul_type:
 	def init_dst(self):
 		self._fs_mounted = False
 		self._bridged = False
+		self.__load_ct_config_dst(vz_conf_dir)
 
 	def set_options(self, opts):
 		pass
@@ -119,21 +121,11 @@ class p_haul_type:
 			pid = tasks.readline()
 			return int(pid)
 
-	def __ct_config(self):
-		return "%s.conf" % self._ctid
-
-	#
-	# Meta-images for OVZ -- container config
-	#
 	def get_meta_images(self, path):
-		cfg_name = self.__ct_config()
-		return [(os.path.join(vz_conf_dir, cfg_name), cfg_name)]
+		return []
 
 	def put_meta_images(self, path):
-		logging.info("Putting config file into %s", vz_conf_dir)
-		self.__load_ct_config(path)
-		with open(os.path.join(vz_conf_dir, self.__ct_config()), "w") as ofd:
-			ofd.write(self._cfg)
+		pass
 
 	def __setup_restore_extra_args(self, path, img, connection):
 		"""Create temporary file with extra arguments for criu restore"""
@@ -172,12 +164,7 @@ class p_haul_type:
 			self.__remove_restore_extra_args(args_path)
 
 	def prepare_ct(self, pid):
-		"""Create cgroup hierarchy and put root task into it.
-
-		Hierarchy is unlimited, we will apply config limitations in
-		__apply_cg_config later.
-		"""
-
+		"""Create cgroup hierarchy and put root task into it."""
 		self.__cg_set_veid()
 
 	def mount(self):
@@ -203,36 +190,35 @@ class p_haul_type:
 			self._fs_mounted = False
 
 	def get_fs(self, fs_sk=None):
-
-		rootfs = util.path_to_fs(self._ct_priv)
-		if not rootfs:
-			logging.info("CT is on unknown FS")
-			return None
-
+		rootfs = self.__get_priv_fs_name()
 		logging.info("CT is on %s", rootfs)
-
 		if rootfs == "nfs":
 			return fs_haul_shared.p_haul_fs()
-		if rootfs == "ext3" or rootfs == "ext4":
+		elif rootfs == "ext3" or rootfs == "ext4":
 			ddxml_path = os.path.join(self._ct_priv, "root.hdd",
 				"DiskDescriptor.xml")
 			return fs_haul_ploop.p_haul_fs(ddxml_path, fs_sk)
-
-		logging.info("Unknown CT FS")
-		return None
+		else:
+			logging.error("Unknown CT FS")
+			return None
 
 	def get_fs_receiver(self, fs_sk=None):
-		# Grab default private path from global config
-		with open(vz_global_conf) as ifd:
-			global_config = parse_vz_config(ifd.read())
-		default_private = expand_veid_var(global_config["VE_PRIVATE"],
-			self._ctid)
-		# Create receiver
-		fname_path = os.path.join(default_private, "root.hdd", "root.hds")
-		return fs_haul_ploop.p_haul_fs_receiver(fname_path, fs_sk)
+		rootfs = self.__get_priv_fs_name()
+		logging.info("CT is on %s", rootfs)
+		if rootfs == "ext3" or rootfs == "ext4":
+			fname_path = os.path.join(self._ct_priv, "root.hdd", "root.hds")
+			return fs_haul_ploop.p_haul_fs_receiver(fname_path, fs_sk)
+		else:
+			return None
+
+	def __get_priv_fs_name(self):
+		rootfs = util.path_to_fs(self._ct_priv)
+		if not rootfs:
+			raise Exception("CT is on unknown FS")
+		return rootfs
 
 	def restored(self, pid):
-		self.__apply_cg_config()
+		pass
 
 	def net_lock(self):
 		for veth in self._veths:
@@ -250,7 +236,7 @@ class p_haul_type:
 	def can_pre_dump(self):
 		return True
 
-	def dump_need_ps(self):
+	def dump_need_page_server(self):
 		return True
 
 
