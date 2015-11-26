@@ -2,8 +2,8 @@
 
 import sys
 import signal
-import argparse
 import logging
+import phaul.args_parser
 import phaul.xem_rpc
 import phaul.service
 import phaul.connection
@@ -19,13 +19,8 @@ def fin(foo, bar):
 	stop_fd.close()
 
 
-parser = argparse.ArgumentParser("Process HAULer service server")
-parser.add_argument("--fdrpc", help="File descriptor of rpc socket", type=int, required=True)
-parser.add_argument("--fdmem", help="File descriptor of memory socket", type=int, required=True)
-parser.add_argument("--fdfs", help="File descriptor of fs socket", type=int, required=True)
-parser.add_argument("--log-file", help="Write logging messages to specified file")
-
-args = parser.parse_args()
+# Parse arguments
+args = phaul.args_parser.parse_service_args()
 
 # Configure logging
 logging.basicConfig(filename=args.log_file, filemode="w", level=logging.INFO,
