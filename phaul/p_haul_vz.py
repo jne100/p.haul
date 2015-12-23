@@ -8,7 +8,6 @@ import shlex
 import logging
 import criu_cr
 import util
-import fs_haul_shared
 import fs_haul_ploop
 import pycriu.rpc
 
@@ -36,11 +35,11 @@ class p_haul_type:
 
 		# Read container config
 		with open(self.__ct_config_path(path)) as ifd:
-			config = parse_vz_config(ifd.read())
+			config = _parse_vz_config(ifd.read())
 
 		# Read global config
 		with open(vz_global_conf) as ifd:
-			global_config = parse_vz_config(ifd.read())
+			global_config = _parse_vz_config(ifd.read())
 
 		# Extract veth pairs, later we will equip restore request with this
 		# data and will use it while (un)locking the network
@@ -60,16 +59,16 @@ class p_haul_type:
 
 		# Extract private path from config
 		if "VE_PRIVATE" in config:
-			self._ct_priv = expand_veid_var(config["VE_PRIVATE"], self._ctid)
+			self._ct_priv = _expand_veid_var(config["VE_PRIVATE"], self._ctid)
 		else:
-			self._ct_priv = expand_veid_var(global_config["VE_PRIVATE"],
+			self._ct_priv = _expand_veid_var(global_config["VE_PRIVATE"],
 				self._ctid)
 
 		# Extract root path from config
 		if "VE_ROOT" in config:
-			self._ct_root = expand_veid_var(config["VE_ROOT"], self._ctid)
+			self._ct_root = _expand_veid_var(config["VE_ROOT"], self._ctid)
 		else:
-			self._ct_root = expand_veid_var(global_config["VE_ROOT"],
+			self._ct_root = _expand_veid_var(global_config["VE_ROOT"],
 				self._ctid)
 
 	def __load_ct_config_dst(self, path):
@@ -189,33 +188,48 @@ class p_haul_type:
 			logging.info(proc_output)
 			self._fs_mounted = False
 
-	def get_fs(self, fs_sk=None):
-		rootfs = self.__get_priv_fs_name()
-		logging.info("CT is on %s", rootfs)
-		if rootfs == "nfs":
-			return fs_haul_shared.p_haul_fs()
-		elif rootfs == "ext3" or rootfs == "ext4":
-			ddxml_path = os.path.join(self._ct_priv, "root.hdd",
-				"DiskDescriptor.xml")
-			return fs_haul_ploop.p_haul_fs(ddxml_path, fs_sk)
-		else:
-			logging.error("Unknown CT FS")
-			return None
+	def get_fs(self, fdfs=None):
+		deltas = self.__parse_fdfs_arg(fdfs)
+		return fs_haul_ploop.p_haul_fs(deltas)
 
-	def get_fs_receiver(self, fs_sk=None):
-		rootfs = self.__get_priv_fs_name()
-		logging.info("CT is on %s", rootfs)
-		if rootfs == "ext3" or rootfs == "ext4":
-			fname_path = os.path.join(self._ct_priv, "root.hdd", "root.hds")
-			return fs_haul_ploop.p_haul_fs_receiver(fname_path, fs_sk)
-		else:
-			return None
+	def get_fs_receiver(self, fdfs=None):
+		deltas = self.__parse_fdfs_arg(fdfs)
+		return fs_haul_ploop.p_haul_fs_receiver(deltas)
 
-	def __get_priv_fs_name(self):
-		rootfs = util.path_to_fs(self._ct_priv)
-		if not rootfs:
-			raise Exception("CT is on unknown FS")
-		return rootfs
+	def __parse_fdfs_arg(self, fdfs):
+		"""
+		Parse string containing list of ploop deltas with socket fds
+
+		String contain list of active ploop deltas with corresponding socket
+		file descriptors in format %delta_path1%:%socket_fd1%[,...]. Parse it
+		and return list of tuples.
+		"""
+
+		FDFS_DELTAS_SEPARATOR = ","
+		FDFS_PAIR_SEPARATOR = ":"
+
+		if not fdfs:
+			return []
+
+		deltas = []
+		for delta in fdfs.split(FDFS_DELTAS_SEPARATOR):
+			path, dummy, fd = delta.rpartition(FDFS_PAIR_SEPARATOR)
+			deltas.append((self.__get_ploop_delta_abspath(path), int(fd)))
+
+		return deltas
+
+	def __get_ploop_delta_abspath(self, delta_path):
+		"""
+		Transform delta path to absolute form
+
+		If delta path starts with a slash it is already in absolute form,
+		otherwise it is relative to containers private.
+		"""
+
+		if delta_path.startswith("/"):
+			return delta_path
+		else:
+			return os.path.join(self._ct_priv, delta_path)
 
 	def restored(self, pid):
 		pass
@@ -245,7 +259,7 @@ def add_hauler_args(parser):
 	parser.add_argument("--vz-dst-ctid", help="ctid at destination")
 
 
-def parse_vz_config(body):
+def _parse_vz_config(body):
 	"""Parse shell-like virtuozzo config file"""
 
 	config_values = dict()
@@ -255,6 +269,6 @@ def parse_vz_config(body):
 	return config_values
 
 
-def expand_veid_var(value, ctid):
+def _expand_veid_var(value, ctid):
 	"""Replace shell-like VEID variable with actual container id"""
 	return value.replace("$VEID", ctid).replace("${VEID}", ctid)

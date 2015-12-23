@@ -2,21 +2,31 @@
 # ploop disk hauler
 #
 
+import os
 import logging
 import threading
 import libploop
 
 
-class p_haul_fs:
-	def __init__(self, ddxml_path, fs_sk):
-		"""Initialize ploop disk hauler
+DDXML_FILENAME = "DiskDescriptor.xml"
 
-		Initialize ploop disk hauler with specified path to DiskDescriptor.xml
-		file and socket.
+
+class p_haul_fs:
+	def __init__(self, deltas):
+		"""Initialize ploop disks hauler
+
+		For each disk create libploop.ploopcopy object using path to disk
+		descriptor file and corresponding socket.
 		"""
 
-		logging.info("Initilized ploop hauler (%s)", ddxml_path)
-		self.__ploopcopy = libploop.ploopcopy(ddxml_path, fs_sk.fileno())
+		# Create libploop.ploopcopy objects, one per active ploop delta
+		self.__log_init_hauler(deltas)
+		self.__ploop_copies = []
+		for delta_path, delta_fd in deltas:
+			ddxml_path = self.__get_ddxml_path(delta_path)
+			self.__check_ddxml(ddxml_path)
+			self.__ploop_copies.append(
+				libploop.ploopcopy(ddxml_path, delta_fd))
 
 	def set_options(self, opts):
 		pass
@@ -25,35 +35,86 @@ class p_haul_fs:
 		pass
 
 	def start_migration(self):
-		self.__ploopcopy.copy_start()
+		for ploopcopy in self.__ploop_copies:
+			ploopcopy.copy_start()
 
 	def next_iteration(self):
-		self.__ploopcopy.copy_next_iteration()
+		for ploopcopy in self.__ploop_copies:
+			ploopcopy.copy_next_iteration()
 
 	def stop_migration(self):
-		self.__ploopcopy.copy_stop()
+		for ploopcopy in self.__ploop_copies:
+			ploopcopy.copy_stop()
 
 	def persistent_inodes(self):
 		"""Inode numbers do not change during ploop disk migration"""
 		return True
 
+	def __log_init_hauler(self, deltas):
+		logging.info("Initialize ploop hauler")
+		for delta in deltas:
+			logging.info("\t`- %s", delta[0])
 
-class p_haul_fs_receiver(threading.Thread):
-	def __init__(self, fname_path, fs_sk):
-		"""Initialize ploop disk receiver
+	def __get_ddxml_path(self, delta_path):
+		"""Get path to disk descriptor file by path to disk delta"""
+		return os.path.join(os.path.dirname(delta_path), DDXML_FILENAME)
 
-		Initialize ploop disk receiver with specified path to root.hds file
-		and socket.
+	def __check_ddxml(self, ddxml_path):
+		"""Check disk descriptor file exist"""
+		if not os.path.isfile(ddxml_path):
+			raise Exception("{0} file missing".format(ddxml_path))
+
+
+class p_haul_fs_receiver:
+	def __init__(self, deltas):
+		"""Initialize ploop disks receiver
+
+		For each disk create delta receiver object using path to active delta
+		of the ploop disk and corresponding socket.
 		"""
 
+		# Create delta_receiver objects, one per active ploop delta
+		self.__log_init_receiver(deltas)
+		self.__delta_receivers = []
+		for delta_path, delta_fd in deltas:
+			self.__check_delta(delta_path)
+			self.__delta_receivers.append(delta_receiver(delta_path, delta_fd))
+
+	def start_receive(self):
+		"""Start all delta receiver threads"""
+		for receiver in self.__delta_receivers:
+			receiver.start()
+
+	def stop_receive(self):
+		"""Join all delta receiver threads"""
+		for receiver in self.__delta_receivers:
+			receiver.join()
+
+	def __log_init_receiver(self, deltas):
+		logging.info("Initialize ploop receiver")
+		for delta in deltas:
+			logging.info("\t`- %s", delta[0])
+
+	def __check_delta(self, delta_path):
+		"""Check delta file don't exist and parent directory exist"""
+
+		delta_dir = os.path.dirname(delta_path)
+		if not os.path.isdir(delta_dir):
+			raise Exception("{0} directory missing".format(delta_dir))
+
+		if os.path.isfile(delta_path):
+			raise Exception("{0} already exist".format(delta_path))
+
+
+class delta_receiver(threading.Thread):
+	def __init__(self, delta_path, delta_fd):
+		"""Initialize ploop single active delta receiver"""
 		threading.Thread.__init__(self)
-		self.__fname_path = fname_path
-		self.__fs_sk = fs_sk
+		self.__path = delta_path
+		self.__fd = delta_fd
 
 	def run(self):
 		try:
-			logging.info("Started fs receiver")
-			libploop.ploopcopy_receiver(self.__fname_path,
-				self.__fs_sk.fileno())
+			libploop.ploopcopy_receiver(self.__path, self.__fd)
 		except:
-			logging.exception("Exception in p_haul_fs_receiver")
+			logging.exception("Exception in %s delta receiver", self.__path)
