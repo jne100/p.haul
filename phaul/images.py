@@ -41,18 +41,19 @@ class untar_thread(threading.Thread):
 
 	def run(self):
 		try:
-			tf = tarfile.open(mode="r|", fileobj=util.fileobj_wrap(self.__sk))
+			tf_fileobj = util.tarfile_fileobj_wrap(self.__sk)
+			tf = tarfile.open(mode="r|", fileobj=tf_fileobj)
 			tf.extractall(self.__dir)
 			tf.close()
-			# Discard all remaining data in socket after tarfile closed
-			util.discard_sk_input(self.__sk)
+			tf_fileobj.discard_unread_input()
 		except:
 			logging.exception("Exception in untar_thread")
 
 
 class img_tar:
 	def __init__(self, sk, dirname):
-		self.__tf = tarfile.open(mode="w|", fileobj=util.fileobj_wrap(sk))
+		tf_fileobj = util.tarfile_fileobj_wrap(sk)
+		self.__tf = tarfile.open(mode="w|", fileobj=tf_fileobj)
 		self.__dir = dirname
 
 	def add(self, img, path = None):

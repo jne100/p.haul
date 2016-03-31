@@ -7,7 +7,16 @@ import pycriu.rpc
 import criu_req
 
 
+def criu_predump(pid, img, criu_connection, fs):
+	logging.info("\tIssuing pre-dump command to service")
+	req = criu_req.make_predump_req(pid, img, criu_connection, fs)
+	resp = criu_connection.send_req(req)
+	if not resp.success:
+		raise Exception("Pre-dump failed")
+
+
 def criu_dump(htype, pid, img, criu_connection, fs):
+	logging.info("\tIssuing dump command to service")
 	req = criu_req.make_dump_req(pid, htype, img, criu_connection, fs)
 	resp = criu_connection.send_req(req)
 	while True:
