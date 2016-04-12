@@ -12,8 +12,28 @@ import mstats
 DDXML_FILENAME = "DiskDescriptor.xml"
 
 
+def get_ddxml_path(path):
+	"""Get path to disk descriptor file by path to disk delta or directory"""
+	p = path if os.path.isdir(path) else os.path.dirname(path)
+	return os.path.join(p, DDXML_FILENAME)
+
+
+def get_delta_abspath(delta_path, ct_priv):
+	"""
+	Transform delta path to absolute form
+
+	If delta path starts with a slash it is already in absolute form,
+	otherwise it is relative to containers private.
+	"""
+
+	if delta_path.startswith("/"):
+		return delta_path
+	else:
+		return os.path.join(ct_priv, delta_path)
+
+
 class p_haul_fs:
-	def __init__(self, deltas):
+	def __init__(self, deltas, ct_priv):
 		"""Initialize ploop disks hauler
 
 		For each disk create libploop.ploopcopy object using path to disk
@@ -22,9 +42,10 @@ class p_haul_fs:
 
 		# Create libploop.ploopcopy objects, one per active ploop delta
 		self.__log_init_hauler(deltas)
+		self.__ct_priv = ct_priv
 		self.__ploop_copies = []
 		for delta_path, delta_fd in deltas:
-			ddxml_path = self.__get_ddxml_path(delta_path)
+			ddxml_path = get_ddxml_path(delta_path)
 			self.__check_ddxml(ddxml_path)
 			self.__ploop_copies.append(
 				libploop.ploopcopy(ddxml_path, delta_fd))
@@ -61,10 +82,6 @@ class p_haul_fs:
 		logging.info("Initialize ploop hauler")
 		for delta in deltas:
 			logging.info("\t`- %s", delta[0])
-
-	def __get_ddxml_path(self, delta_path):
-		"""Get path to disk descriptor file by path to disk delta"""
-		return os.path.join(os.path.dirname(delta_path), DDXML_FILENAME)
 
 	def __check_ddxml(self, ddxml_path):
 		"""Check disk descriptor file exist"""
