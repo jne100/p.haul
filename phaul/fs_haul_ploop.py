@@ -3,10 +3,12 @@
 #
 
 import os
+import shutil
 import logging
 import threading
 import libploop
 import mstats
+import iters
 
 
 DDXML_FILENAME = "DiskDescriptor.xml"
@@ -32,6 +34,34 @@ def get_delta_abspath(delta_path, ct_priv):
 		return os.path.join(ct_priv, delta_path)
 
 
+def merge_ploop_snapshot(ddxml, guid):
+	libploop.snapshot(ddxml).delete(guid)
+
+
+class shared_ploop:
+	def __init__(self, path):
+		self.__backup_ddxml = get_ddxml_path(path) + ".copy"
+		self.__orig_ddxml = get_ddxml_path(path)
+
+	def prepare(self):
+		shutil.copyfile(self.__orig_ddxml, self.__backup_ddxml)
+		self.__orig_guid = libploop.snapshot(self.__orig_ddxml).create_offline()
+		self.__backup_guid = libploop.snapshot(self.__backup_ddxml).create()
+
+	def restore(self):
+		if self.__backup_guid:
+			os.rename(self.__backup_ddxml, self.__orig_ddxml)
+			merge_ploop_snapshot(self.__orig_ddxml, self.__backup_guid)
+
+	def cleanup(self):
+		if self.__orig_guid:
+			# TODO add delta removing when igor add it to libploop
+			os.remove(self.__backup_ddxml)
+			os.remove(self.__backup_ddxml + ".lck")
+
+	def get_orig_info(self):
+		return {"ddxml": self.__orig_ddxml, "guid": self.__orig_guid}
+
 class p_haul_fs:
 	def __init__(self, deltas, ct_priv):
 		"""Initialize ploop disks hauler
@@ -43,6 +73,7 @@ class p_haul_fs:
 		# Create libploop.ploopcopy objects, one per active ploop delta
 		self.__log_init_hauler(deltas)
 		self.__ct_priv = ct_priv
+		self.__shared_ploops = []
 		self.__ploop_copies = []
 		for delta_path, delta_fd in deltas:
 			ddxml_path = get_ddxml_path(delta_path)
@@ -50,8 +81,16 @@ class p_haul_fs:
 			self.__ploop_copies.append(
 				libploop.ploopcopy(ddxml_path, delta_fd))
 
+	def __parse_shared_ploops(self, shareds):
+		if not shareds:
+			return []
+		return (get_delta_abspath(s, self.__ct_priv) for s in shareds.split(","))
+
 	def set_options(self, opts):
-		pass
+		if iters.is_live_mode(opts.get("mode", None)):
+			shareds = self.__parse_shared_ploops(opts.get("vz_shared_disks", []))
+			for shared in shareds:
+				self.__shared_ploops.append(shared_ploop(shared))
 
 	def set_work_dir(self, wdir):
 		pass
@@ -72,7 +111,26 @@ class p_haul_fs:
 		total_xferred = 0
 		for ploopcopy in self.__ploop_copies:
 			total_xferred += ploopcopy.copy_stop()
+
+		for pl in self.__shared_ploops:
+			pl.prepare()
+
 		return mstats.fs_iter_stats(total_xferred)
+
+	def restore_shared_ploops(self):
+		for pl in self.__shared_ploops:
+			pl.restore()
+
+	def cleanup_shared_ploops(self):
+		for pl in self.__shared_ploops:
+			pl.cleanup()
+
+	def prepare_src_data(self, data):
+		if self.__shared_ploops:
+			data["shareds"] = []
+			for pl in self.__shared_ploops:
+				data["shareds"].append(pl.get_orig_info())
+		return data
 
 	def persistent_inodes(self):
 		"""Inode numbers do not change during ploop disk migration"""

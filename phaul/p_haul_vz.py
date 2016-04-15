@@ -174,7 +174,7 @@ class p_haul_type:
 			self.__setup_restore_extra_args(args_path, img, connection)
 			# Run vzctl restore
 			logging.info("Starting vzctl restore")
-			proc = subprocess.Popen([vzctl_bin, "--skiplock", "restore",
+			proc = subprocess.Popen([vzctl_bin, "--skipowner", "--skiplock", "restore",
 				self._ctid, "--dumpfile", img.image_dir()],
 				stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 			proc_output = proc.communicate()[0]
@@ -193,7 +193,7 @@ class p_haul_type:
 		logging.info("Mounting CT root to %s", self._ct_root)
 		logging.info("Running vzctl mount")
 		proc = subprocess.Popen(
-			[vzctl_bin, "--skiplock", "mount", self._ctid],
+			[vzctl_bin, "--skipowner", "--skiplock", "mount", self._ctid],
 			stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 		proc_output = proc.communicate()[0]
 		logging.info(proc_output)
@@ -205,17 +205,30 @@ class p_haul_type:
 			logging.info("Umounting CT root")
 			logging.info("Running vzctl umount")
 			proc = subprocess.Popen(
-				[vzctl_bin, "--skiplock", "umount", self._ctid],
+				[vzctl_bin, "--skipowner", "--skiplock", "umount", self._ctid],
 				stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 			proc_output = proc.communicate()[0]
 			logging.info(proc_output)
 			self._fs_mounted = False
 
+	def migration_complete(self, fs, target_host):
+		fs.cleanup_shared_ploops()
+		self.umount()
+		target_host.migration_complete(fs.prepare_src_data({}))
+
+	def migration_fail(self, fs):
+		fs.restore_shared_ploops()
+
+	def target_cleanup(self, src_data):
+		if "shareds" in src_data:
+			for ploop in src_data["shareds"]:
+				fs_haul_ploop.merge_ploop_snapshot(ploop["ddxml"], ploop["guid"])
+
 	def start(self):
 		logging.info("Starting CT")
 		logging.info("Running vzctl start")
 		proc = subprocess.Popen(
-			[vzctl_bin, "--skiplock", "start", self._ctid],
+			[vzctl_bin, "--skipowner", "--skiplock", "start", self._ctid],
 			stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 		proc_output = proc.communicate()[0]
 		logging.info(proc_output)
@@ -224,7 +237,7 @@ class p_haul_type:
 	def stop(self, umount):
 		logging.info("Stopping CT")
 		logging.info("Running vzctl stop")
-		args = [vzctl_bin, "--skiplock", "stop", self._ctid]
+		args = [vzctl_bin, "--skipowner", "--skiplock", "stop", self._ctid]
 		if not umount:
 			args.append("--skip-umount")
 		proc = subprocess.Popen(
@@ -289,6 +302,7 @@ class p_haul_type:
 def add_hauler_args(parser):
 	"""Add Virtuozzo specific command line arguments"""
 	parser.add_argument("--vz-dst-ctid", help="ctid at destination")
+	parser.add_argument("--vz-shared-disks", help="List of shared storage disks")
 
 
 def _parse_vz_config(body):
