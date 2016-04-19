@@ -77,6 +77,8 @@ class phaul_iter_worker:
 
 	def set_options(self, opts):
 		self.__force = opts["force"]
+		self.__skip_cpu_check = opts["skip_cpu_check"]
+		self.__skip_criu_check = opts["skip_criu_check"]
 		self.__pre_dump = opts["pre_dump"]
 		self.htype.set_options(opts)
 		self.fs.set_options(opts)
@@ -87,7 +89,7 @@ class phaul_iter_worker:
 		self.target_host.set_options(opts)
 
 	def __validate_cpu(self):
-		if self.__force:
+		if self.__skip_cpu_check or self.__force:
 			return
 		logging.info("Checking CPU compatibility")
 
@@ -107,6 +109,16 @@ class phaul_iter_worker:
 		logging.info("\t`- Checking CPU info")
 		if not self.target_host.check_cpuinfo():
 			raise Exception("CPUs mismatch")
+
+	def __validate_criu_version(self):
+		if self.__skip_criu_check or self.__force:
+			return
+		logging.info("Checking criu version")
+		version = criu_api.get_criu_version()
+		if not version:
+			raise Exception("Can't get criu version")
+		if not self.target_host.check_criu_version(version):
+			raise Exception("Incompatible criu versions")
 
 	def __check_support_mem_track(self):
 		req = criu_req.make_dirty_tracking_req(self.img)
@@ -159,6 +171,7 @@ class phaul_iter_worker:
 
 		self.fs.set_work_dir(self.img.work_dir())
 		self.__validate_cpu()
+		self.__validate_criu_version()
 		use_pre_dumps = self.__check_use_pre_dumps()
 		root_pid = self.htype.root_task_pid()
 
