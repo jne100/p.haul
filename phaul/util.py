@@ -78,3 +78,18 @@ def makedirs(dirpath):
 			pass
 		else:
 			raise
+
+
+def log_uncaught_exception(type, value, traceback):
+	logging.error(value, exc_info=(type, value, traceback))
+
+
+def log_header():
+	OFFSET_LINES_COUNT = 3
+	for i in range(OFFSET_LINES_COUNT):
+		logging.info("")
+
+
+def log_subprocess_output(output):
+	for line in output.splitlines():
+		logging.info("\t> %s", line)
