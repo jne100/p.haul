@@ -16,7 +16,8 @@ criu_binary = "criu"
 
 cpuinfo_img_name = "cpuinfo.img"
 
-def_verb = 2
+#def_verb = 2
+def_verb = 4
 
 
 #
