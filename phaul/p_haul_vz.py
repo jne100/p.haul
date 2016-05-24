@@ -7,6 +7,7 @@ import subprocess
 import shlex
 import logging
 import criu_cr
+import criu_api
 import util
 import fs_haul_ploop
 import pycriu.rpc
@@ -45,6 +46,7 @@ class p_haul_type:
 		# v_bridge is the bridge to which thie veth is attached
 		#
 		self._veths = []
+		self.__verbose = criu_api.def_verb
 
 	def __load_ct_config(self, path):
 		logging.info("Loading config file from %s", path)
@@ -117,7 +119,7 @@ class p_haul_type:
 		self.__load_ct_config_dst(vz_conf_dir)
 
 	def set_options(self, opts):
-		pass
+		self.__verbose = opts["verbose"]
 
 	def adjust_criu_req(self, req):
 		"""Add module-specific options to criu request"""
@@ -137,10 +139,9 @@ class p_haul_type:
 			req.opts.ghost_limit = 50 << 20
 
 	def root_task_pid(self):
-		# Expect first line of tasks file contain root pid of CT
-		path = "/sys/fs/cgroup/memory/{0}/tasks".format(self._ctid)
-		with open(path) as tasks:
-			pid = tasks.readline()
+		path = "/var/run/ve/{0}.init.pid".format(self._ctid)
+		with open(path) as pidfile:
+			pid = pidfile.read()
 			return int(pid)
 
 	def get_meta_images(self, path):
@@ -148,20 +149,6 @@ class p_haul_type:
 
 	def put_meta_images(self, path):
 		pass
-
-	def __setup_restore_extra_args(self, path, img, connection):
-		"""Create temporary file with extra arguments for criu restore"""
-		extra_args = [
-			"VE_WORK_DIR={0}\n".format(img.work_dir()),
-			"VE_RESTORE_LOG_PATH={0}\n".format(
-				connection.get_log_name(pycriu.rpc.RESTORE))]
-		with open(path, "w") as f:
-			f.writelines(extra_args)
-
-	def __remove_restore_extra_args(self, path):
-		"""Remove temporary file with extra arguments for criu restore"""
-		if os.path.isfile(path):
-			os.remove(path)
 
 	def final_dump(self, pid, img, ccon, fs):
 		criu_cr.criu_dump(self, pid, img, ccon, fs)
@@ -184,6 +171,21 @@ class p_haul_type:
 		finally:
 			# Remove restore extra arguments
 			self.__remove_restore_extra_args(args_path)
+
+	def __setup_restore_extra_args(self, path, img, connection):
+		"""Create temporary file with extra arguments for criu restore"""
+		extra_args = [
+			"VE_WORK_DIR={0}\n".format(img.work_dir()),
+			"VE_RESTORE_LOG_PATH={0}\n".format(
+				connection.get_log_name(pycriu.rpc.RESTORE)),
+			"VE_CRIU_LOGLEVEL={0}\n".format(self.__verbose)]
+		with open(path, "w") as f:
+			f.writelines(extra_args)
+
+	def __remove_restore_extra_args(self, path):
+		"""Remove temporary file with extra arguments for criu restore"""
+		if os.path.isfile(path):
+			os.remove(path)
 
 	def prepare_ct(self, pid):
 		"""Create cgroup hierarchy and put root task into it."""
