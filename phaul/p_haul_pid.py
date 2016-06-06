@@ -79,6 +79,9 @@ class p_haul_type:
 	def final_dump(self, pid, img, ccon, fs):
 		criu_cr.criu_dump(self, pid, img, ccon, fs)
 
+	def final_restore(self, img, ccon):
+		criu_cr.criu_restore(self, img, ccon)
+
 	def migration_complete(self, fs, target_host):
 		pass
 
@@ -87,9 +90,6 @@ class p_haul_type:
 
 	def target_cleanup(self, src_data):
 		pass
-
-	def final_restore(self, img, connection):
-		criu_cr.criu_restore(self, img, connection)
 
 	# Things are started to get restored, only the
 	# first task (with pid @pid) is created.

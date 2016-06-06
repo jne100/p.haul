@@ -94,22 +94,6 @@ class p_haul_type:
 		else:
 			raise Exception("Can not find container fs")
 
-	def final_dump(self, pid, img, ccon, fs):
-		logging.info("Dump docker container %s", pid)
-
-		# TODO: docker API does not have checkpoint right now
-		# cli.checkpoint() so we have to use the command line
-		# cli = docker.Client(base_url='unix://var/run/docker.sock')
-		# output = cli.info()
-		# call docker API
-
-		logf = open("/tmp/docker_checkpoint.log", "w+")
-		image_path_opt = "--image-dir=" + img.image_dir()
-		ret = sp.call([docker_bin, "checkpoint", image_path_opt, self._ctid],
-			stdout = logf, stderr = logf)
-		if ret != 0:
-			raise Exception("docker checkpoint failed")
-
 	#
 	# Meta-images for docker -- /var/run/docker
 	#
@@ -153,7 +137,23 @@ class p_haul_type:
 	def cpuinfo_check(self, img, ccon):
 		return criu_cr.criu_cpuinfo_check(img, ccon)
 
-	def final_restore(self, img, criu):
+	def final_dump(self, pid, img, ccon, fs):
+		logging.info("Dump docker container %s", pid)
+
+		# TODO: docker API does not have checkpoint right now
+		# cli.checkpoint() so we have to use the command line
+		# cli = docker.Client(base_url='unix://var/run/docker.sock')
+		# output = cli.info()
+		# call docker API
+
+		logf = open("/tmp/docker_checkpoint.log", "w+")
+		image_path_opt = "--image-dir=" + img.image_dir()
+		ret = sp.call([docker_bin, "checkpoint", image_path_opt, self._ctid],
+			stdout = logf, stderr = logf)
+		if ret != 0:
+			raise Exception("docker checkpoint failed")
+
+	def final_restore(self, img, ccon):
 		logf = open("/tmp/docker_restore.log", "w+")
 
 		# Kill any previous docker daemon in order to reload the

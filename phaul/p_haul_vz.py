@@ -159,12 +159,12 @@ class p_haul_type:
 	def final_dump(self, pid, img, ccon, fs):
 		criu_cr.criu_dump(self, pid, img, ccon, fs)
 
-	def final_restore(self, img, connection):
+	def final_restore(self, img, ccon):
 		"""Perform Virtuozzo-specific final restore"""
 		try:
 			# Setup restore extra arguments
 			args_path = os.path.join(img.image_dir(), "restore-extra-args")
-			self.__setup_restore_extra_args(args_path, img, connection)
+			self.__setup_restore_extra_args(args_path, img, ccon)
 			# Run vzctl restore
 			logging.info("Starting vzctl restore")
 			proc = subprocess.Popen([vzctl_bin, "--skipowner", "--skiplock", "restore",
