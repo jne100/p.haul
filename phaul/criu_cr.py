@@ -7,6 +7,18 @@ import pycriu.rpc
 import criu_req
 
 
+def criu_cpuinfo_dump(img, criu_connection):
+	"""Perform default cpu information dump"""
+	req = criu_req.make_cpuinfo_dump_req(img)
+	return criu_connection.send_req(req)
+
+
+def criu_cpuinfo_check(img, criu_connection):
+	"""Perform default cpu compatibility check"""
+	req = criu_req.make_cpuinfo_check_req(img)
+	return criu_connection.send_req(req)
+
+
 def criu_predump(pid, img, criu_connection, fs):
 	logging.info("\tIssuing pre-dump command to service")
 	req = criu_req.make_predump_req(pid, img, criu_connection, fs)

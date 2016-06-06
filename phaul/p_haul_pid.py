@@ -70,6 +70,12 @@ class p_haul_type:
 	def put_meta_images(self, dir):
 		pass
 
+	def cpuinfo_dump(self, img, ccon):
+		return criu_cr.criu_cpuinfo_dump(img, ccon)
+
+	def cpuinfo_check(self, img, ccon):
+		return criu_cr.criu_cpuinfo_check(img, ccon)
+
 	def final_dump(self, pid, img, ccon, fs):
 		criu_cr.criu_dump(self, pid, img, ccon, fs)
 

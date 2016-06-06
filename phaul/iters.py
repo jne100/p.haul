@@ -95,8 +95,7 @@ class phaul_iter_worker:
 		logging.info("Checking CPU compatibility")
 
 		logging.info("\t`- Dumping CPU info")
-		req = criu_req.make_cpuinfo_dump_req(self.img)
-		resp = self.criu_connection.send_req(req)
+		resp = self.htype.cpuinfo_dump(self.img, self.criu_connection)
 		if resp.HasField('cr_errno') and (resp.cr_errno == errno.ENOTSUP):
 			logging.warning("\t`- Dumping CPU info not supported")
 			return

@@ -115,6 +115,12 @@ class p_haul_type:
 		logging.info("Putting config file into %s", lxc_dir)
 		shutil.copy(os.path.join(dir, "config"), self.__ct_config())
 
+	def cpuinfo_dump(self, img, ccon):
+		return criu_cr.criu_cpuinfo_dump(img, ccon)
+
+	def cpuinfo_check(self, img, ccon):
+		return criu_cr.criu_cpuinfo_check(img, ccon)
+
 	def final_dump(self, pid, img, ccon, fs):
 		criu_cr.criu_dump(self, pid, img, ccon, fs)
 

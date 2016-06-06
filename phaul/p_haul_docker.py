@@ -147,6 +147,12 @@ class p_haul_type:
 	def target_cleanup(self, src_data):
 		pass
 
+	def cpuinfo_dump(self, img, ccon):
+		return criu_cr.criu_cpuinfo_dump(img, ccon)
+
+	def cpuinfo_check(self, img, ccon):
+		return criu_cr.criu_cpuinfo_check(img, ccon)
+
 	def final_restore(self, img, criu):
 		logf = open("/tmp/docker_restore.log", "w+")
 

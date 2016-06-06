@@ -95,8 +95,7 @@ class phaul_service:
 
 	def rpc_check_cpuinfo(self):
 		logging.info("Checking cpuinfo")
-		req = criu_req.make_cpuinfo_check_req(self.img)
-		resp = self.criu_connection.send_req(req)
+		resp = self.htype.cpuinfo_check(self.img, self.criu_connection)
 		logging.info("\t`- %s", resp.success)
 		return resp.success
 
