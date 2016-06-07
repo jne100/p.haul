@@ -80,6 +80,9 @@ class criu_conn:
 	def get_log_name(self, req_type):
 		return "criu_%s.%d.log" % (criu_req.get_name(req_type), self._iter)
 
+	def get_swrk_pid(self):
+		return self._swrk.pid
+
 	def memory_tracking(self, value):
 		self._track_mem = value
 
