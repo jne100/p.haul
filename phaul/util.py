@@ -80,6 +80,53 @@ def makedirs(dirpath):
 			raise
 
 
+
+
+
+
+
+
+
+class cg_substitutor:
+	"""Helper class needed to temporary change cgroup of process"""
+	def __init__(self, controller, path, pid):
+		self.__controller = controller
+		self.__path = path
+		self.__pid = pid
+
+	def __enter__(self):
+		"""Temporary add process to specified cgroup"""
+		cg_add_pid(self.__controller, self.__path, self.__pid)
+		return self
+
+	def __exit__(self, *args):
+		"""Return process back to root cgroup"""
+		cg_add_pid(self.__controller, "", self.__pid)
+
+
+def cg_add_pid(controller, path, pid):
+	"""Add pid to specified cgroup"""
+	tasks_path = os.path.join("/sys/fs/cgroup", controller, path, "tasks")
+
+	# $$$
+	#with open(tasks_path, "w") as f:
+	#	f.write(str(pid))
+	logging.info("~> cg_add_pid(%s)", tasks_path)
+
+
+def cg_create(controller, path):
+	"""Create specified cgroup"""
+	dir_path = os.path.join("/sys/fs/cgroup", controller, path)
+
+	# $$$
+	#if not os.path.isdir(dir_path):
+	#	os.mkdir(dir_path)
+	logging.info("~> cg_create(%s)", dir_path)
+
+
+
+
+
 def log_uncaught_exception(type, value, traceback):
 	logging.error(value, exc_info=(type, value, traceback))
 

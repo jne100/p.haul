@@ -151,10 +151,28 @@ class p_haul_type:
 		pass
 
 	def cpuinfo_dump(self, img, ccon):
-		return criu_cr.criu_cpuinfo_dump(img, ccon)
+		"""Perform Virtuozzo-specific cpu info dump
+
+		Temporary add criu swrk process to container cgroup to handle cpu
+		features masking correctly and return it back to root cgroup when
+		cpu info dump finished.
+		"""
+
+		with util.cg_substitutor("ve", str(self._ctid), ccon.get_swrk_pid()):
+			return criu_cr.criu_cpuinfo_dump(img, ccon)
 
 	def cpuinfo_check(self, img, ccon):
-		return criu_cr.criu_cpuinfo_check(img, ccon)
+		"""Perform Virtuozzo-specific cpu compatibility check
+
+		Temporary add criu swrk process to special fake phaul cgroup to handle
+		cpu features masking correctly and return it back to root cgroup when
+		cpu compatibility check finished.
+		"""
+
+		TMP_CG_PATH = "p.haul"
+		util.cg_create("ve", TMP_CG_PATH)
+		with util.cg_substitutor("ve", TMP_CG_PATH, ccon.get_swrk_pid()):
+			return criu_cr.criu_cpuinfo_check(img, ccon)
 
 	def final_dump(self, pid, img, ccon, fs):
 		criu_cr.criu_dump(self, pid, img, ccon, fs)
