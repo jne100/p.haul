@@ -122,6 +122,7 @@ class p_haul_type:
 
 	def set_options(self, opts):
 		self.__verbose = opts["verbose"]
+		self.__secondary_disks = opts.get("vz_secondary_disks")
 
 	def adjust_criu_req(self, req):
 		"""Add module-specific options to criu request"""
@@ -139,13 +140,24 @@ class p_haul_type:
 			for key, value in vz_cgroup_mount_map.items():
 				req.opts.ext_mnt.add(key=key, val=value)
 
+			# Specify secondary ploop disks as external
+			disks = self.__parse_secondary_disks_arg(self.__secondary_disks)
+			for uuid, major, minor in disks:
+				req.opts.external.append(
+					"dev[{0}/{1}]:{2}".format(major, minor + 1, uuid))
+
 			# Increase ghost-limit up to 50Mb
 			req.opts.ghost_limit = 50 << 20
 
-		# Specify freezer cgroup for both predump and dump requests
+		# Specify both predump and dump specific options
 		if req.type == pycriu.rpc.PRE_DUMP or req.type == pycriu.rpc.DUMP:
+
+			# Specify freezer cgroup
 			req.opts.freeze_cgroup = \
-				"/sys/fs/cgroup/freezer/{0}/".format(self._ctid)
+				"/sys/fs/cgroup/freezer/machine.slice/{0}/".format(self._ctid)
+
+			# Increase timeout up to 180 seconds
+			req.opts.timeout = 180
 
 	def root_task_pid(self):
 		path = "/var/run/ve/{0}.init.pid".format(self._ctid)
@@ -314,28 +326,6 @@ class p_haul_type:
 		deltas = self.__parse_fdfs_arg(fdfs)
 		return fs_haul_ploop.p_haul_fs_receiver(deltas)
 
-	def __parse_fdfs_arg(self, fdfs):
-		"""
-		Parse string containing list of ploop deltas with socket fds
-
-		String contain list of active ploop deltas with corresponding socket
-		file descriptors in format %delta_path1%:%socket_fd1%[,...]. Parse it
-		and return list of tuples.
-		"""
-
-		FDFS_DELTAS_SEPARATOR = ","
-		FDFS_PAIR_SEPARATOR = ":"
-
-		if not fdfs:
-			return []
-
-		deltas = []
-		for delta in fdfs.split(FDFS_DELTAS_SEPARATOR):
-			path, dummy, fd = delta.rpartition(FDFS_PAIR_SEPARATOR)
-			deltas.append((fs_haul_ploop.get_delta_abspath(path, self._ct_priv), int(fd)))
-
-		return deltas
-
 	def restored(self, pid):
 		pass
 
@@ -358,10 +348,56 @@ class p_haul_type:
 	def dump_need_page_server(self):
 		return True
 
+	def __parse_fdfs_arg(self, fdfs):
+		"""
+		Parse string containing list of ploop deltas with socket fds
+
+		String contain list of active ploop deltas with corresponding socket
+		file descriptors in format %delta_path1%:%socket_fd1%[,...]. Parse it
+		and return list of tuples.
+		"""
+
+		FDFS_DELTAS_SEPARATOR = ","
+		FDFS_PAIR_SEPARATOR = ":"
+
+		if not fdfs:
+			return []
+
+		deltas = []
+		for delta in fdfs.split(FDFS_DELTAS_SEPARATOR):
+			path, dummy, fd = delta.rpartition(FDFS_PAIR_SEPARATOR)
+			deltas.append((fs_haul_ploop.get_delta_abspath(path, self._ct_priv), int(fd)))
+
+		return deltas
+
+	def __parse_secondary_disks_arg(self, disks_arg):
+		"""
+		Parse string containing list of secondary disks in specific format
+
+		String contain list of secondary ploop disks in format
+		%uuid%:%major%:%minor%[,...]. Consider all additional disks of
+		container (second, third and so on) are secondary. Parse it and return
+		list of tuples.
+		"""
+
+		DISKS_SEPARATOR = ","
+		TUPLE_SEPARATOR = ":"
+
+		if not disks_arg:
+			return []
+
+		disks = []
+		for disk in disks_arg.split(DISKS_SEPARATOR):
+			uuid, major, minor = disk.split(TUPLE_SEPARATOR)
+			disks.append((uuid, int(major), int(minor)))
+
+		return disks
+
 
 def add_hauler_args(parser):
 	"""Add Virtuozzo specific command line arguments"""
 	parser.add_argument("--vz-shared-disks", help="List of shared storage disks")
+	parser.add_argument("--vz-secondary-disks", help="List of secondary ploop disks")
 
 
 def _parse_vz_config(body):
